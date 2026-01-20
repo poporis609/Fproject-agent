@@ -11,7 +11,7 @@ async def startup_handler():
     global config, orchestrate_request
     
     print("=" * 80)
-    print("🔧 Agent Core Runtime 초기화 중...")
+    print("🔧 FastAPI 초기화 중...")
     print("=" * 80)
     
     # 설정 로드

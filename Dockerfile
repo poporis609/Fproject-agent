@@ -1,4 +1,4 @@
-# Dockerfile for Agent Core Runtime - Multi-stage Build
+# Dockerfile for FastAPI - Multi-stage Build
 # Stage 1: Builder - 의존성 설치
 FROM public.ecr.aws/docker/library/python:3.11-slim as builder
 
@@ -35,12 +35,12 @@ ENV PATH=/root/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# 포트 8080 노출 (Agent Core Runtime 필수)
-EXPOSE 8080
+# 포트 8000 노출 (FastAPI 표준)
+EXPOSE 8000
 
 # 헬스체크 추가
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8080/health')" || exit 1
+  CMD python -c "import requests; requests.get('http://localhost:8000/agent/health')" || exit 1
 
 # FastAPI 서버 실행
 CMD ["python", "run.py"]

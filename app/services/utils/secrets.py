@@ -88,7 +88,7 @@ def get_config() -> dict:
         설정 딕셔너리
     """
     # Secret 이름 (환경변수 또는 기본값)
-    secret_name = os.environ.get('SECRET_NAME', 'agent-core-secret')
+    secret_name = os.environ.get('SECRET_NAME', 'diary-agent-secret')
     region_name = os.environ.get('AWS_REGION', 'us-east-1')
     
     try:

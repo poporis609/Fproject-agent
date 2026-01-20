@@ -2,9 +2,9 @@
 
 ## 엔드포인트 개요
 
-모든 agent 관련 엔드포인트는 `/agent` 경로 아래에 있습니다:
+모든 엔드포인트는 `/agent` 경로 아래에 있습니다:
 
-- `GET /health` - 헬스체크
+- `GET /agent/health` - 헬스체크
 - `POST /agent` - 질문 답변 또는 데이터 저장 (orchestrator)
 - `POST /agent/image` - 이미지 생성
 - `POST /agent/report` - 주간 리포트
@@ -318,11 +318,11 @@ result = response.json()
 
 ---
 
-## 5. 헬스체크 (`GET /health`)
+## 5. 헬스체크 (`GET /agent/health`)
 
 **요청:**
 ```bash
-curl https://api.aws11.shop/health
+curl https://api.aws11.shop/agent/health
 ```
 
 **응답:**

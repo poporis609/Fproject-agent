@@ -1,5 +1,5 @@
-# Agent Core Runtime 의존성
-# Docker 컨테이너로 배포됨 (Lambda 아님)
+# FastAPI 의존성
+# Docker 컨테이너로 배포됨
 
 # AWS SDK
 boto3>=1.35.0
@@ -13,14 +13,11 @@ strands-agents-tools
 pydantic>=2.0.0
 pyyaml
 
-# HTTP Client (API 호출용 - weekly_report)
+# HTTP Client (API 호출용)
 httpx>=0.26.0
 
 # Environment
 python-dotenv>=1.0.0
-
-# Agent Core (배포용)
-bedrock-agentcore-starter-toolkit
 
 # FastAPI
 fastapi>=0.109.0

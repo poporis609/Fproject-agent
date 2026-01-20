@@ -6,12 +6,12 @@ from app.core.config import settings
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("🚀 Agent Core Runtime Server 시작")
+    print("🚀 FastAPI Server 시작")
     print("=" * 80)
     print(f"Host: {settings.HOST}")
     print(f"Port: {settings.PORT}")
     print("Endpoints:")
-    print("  - GET  /health")
+    print("  - GET  /agent/health")
     print("  - POST /agent (질문 답변 또는 데이터 저장)")
     print("  - POST /agent/image (이미지 생성)")
     print("  - POST /agent/report (주간 리포트)")

@@ -15,7 +15,7 @@ try:
     knowledge_base_id = config.get('KNOWLEDGE_BASE_ID', '').strip()
     if not knowledge_base_id:
         print("❌ ERROR: KNOWLEDGE_BASE_ID가 비어있습니다!")
-        print("❌ Secrets Manager의 'agent-core-secret'에 KNOWLEDGE_BASE_ID를 설정해주세요.")
+        print("❌ Secrets Manager의 'diary-agent-secret'에 KNOWLEDGE_BASE_ID를 설정해주세요.")
         # sys.exit 대신 경고만 출력 (런타임 오류 방지)
         knowledge_base_id = 'MISSING'
     

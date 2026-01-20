@@ -57,15 +57,17 @@ FastAPI 엔드포인트
 python run.py
 ```
 
+서버가 `http://localhost:8000`에서 시작됩니다.
+
 ### API 호출 예시
 ```bash
 # 질문 답변
-curl -X POST http://localhost:8080/agent \
+curl -X POST http://localhost:8000/agent \
   -H "Content-Type: application/json" \
   -d '{"content":"오늘 뭐 먹었어?","user_id":"user123"}'
 
 # 이미지 생성
-curl -X POST http://localhost:8080/agent/image \
+curl -X POST http://localhost:8000/agent/image \
   -H "Content-Type: application/json" \
   -d '{"content":"이미지 생성해줘","text":"오늘 공원에서 산책했다"}'
 ```
