@@ -155,7 +155,6 @@ image_generator_agent = Agent(
 )
 
 
-@tool
 def run_image_generator(
     request: str, 
     user_id: str = None, 
@@ -164,7 +163,7 @@ def run_image_generator(
     record_date: str = None
 ) -> Dict[str, Any]:
     """
-    Image Generator Agent 실행 함수 (orchestrator에서 호출)
+    Image Generator Agent 실행 함수
     
     Args:
         request: 사용자 요청 (자연어)

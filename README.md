@@ -1,283 +1,198 @@
 # Diary Orchestrator Agent
 
-AWS Bedrock Agent Core Runtime을 사용한 일기 관리 AI Agent 시스템
+Kubernetes 기반 일기 관리 AI Agent 시스템
 
 ## 주요 기능
 
 ### 1. 질문 답변 (Question Agent)
 Knowledge Base를 검색하여 사용자 질문에 답변
 - 예: "2026-01-13일에 나 무슨 영화봤어?"
+- 엔드포인트: `POST /agent`
 
 ### 2. 일기 생성 (Summarize Agent)
 사용자 데이터를 분석하여 일기 형식으로 작성
 - 예: "오늘 영화 보고 파스타 먹었어" → 일기 형식 변환
+- 엔드포인트: `POST /agent/summarize`
 
 ### 3. 이미지 생성 (Image Generator Agent)
 일기 텍스트를 분석하여 이미지 생성
 - Claude Sonnet 4.5로 프롬프트 변환
 - Amazon Nova Canvas로 4:5 비율 이미지 생성
 - S3 자동 업로드 및 URL 제공
-- 미리보기, 배치 생성 등 다양한 기능
+- 엔드포인트: `POST /agent/image`
 
 ### 4. 주간 리포트 (Weekly Report Agent)
 일정 기간의 일기를 분석하여 주간 리포트 생성
-- 감정 점수 분석 (1-10점)
-- 주요 테마 추출
-- 개인화된 피드백 제공
+- 감정 점수 분석, 주요 테마 추출
+- 엔드포인트: `POST /agent/report`
 
-### 5. 데이터 그대로 반환 (No Processing)
+### 5. 데이터 저장
 단순 데이터 입력은 처리 없이 저장
+- 엔드포인트: `POST /agent`
 
 ## 아키텍처
 
 ```
-orchestrator_agent (4개 tool)
-├── generate_auto_summarize (일기 생성)
-├── generate_auto_response (질문 답변)
-├── run_image_generator (이미지 생성)
-│   └── image_generator_agent (9개 tool)
-│       ├── generate_image_for_history
-│       ├── preview_image
-│       ├── batch_generate_images
-│       └── ...
-└── run_weekly_report (주간 리포트)
-    └── weekly_report_agent (6개 tool)
-        ├── create_report
-        ├── get_report_list
-        └── ...
+FastAPI 엔드포인트
+├── /agent (orchestrator)
+│   ├── 질문 답변 (question_agent)
+│   └── 데이터 저장 (no processing)
+├── /agent/image (image_generator_agent)
+├── /agent/report (weekly_report_agent)
+└── /agent/summarize (summarize_agent)
 ```
 
 **특징:**
-- 계층적 구조: Orchestrator → Sub-Agent → Specific Tool
-- 자연어 분석으로 자동 라우팅
-- 각 도메인의 복잡성을 내부에 캡슐화
+- 각 기능이 독립적인 엔드포인트로 분리
+- orchestrator는 질문/데이터 판단만 수행
+- 각 agent는 내부적으로 복잡한 작업 자동 처리
 
-## API 사용법
+자세한 내용은 [docs/API_EXAMPLES.md](./docs/API_EXAMPLES.md) 참고
 
-### 통합된 요청 형식
-모든 요청은 동일한 형식으로 전송하고, orchestrator가 자동으로 적절한 에이전트를 선택합니다.
 
-```json
-{
-  "content": "사용자 요청 (자연어)",
-  "user_id": "user123",
-  "current_date": "2026-01-19"
-}
+## 빠른 시작
+
+### 로컬 실행
+```bash
+python run.py
 ```
 
-### 요청 예시
+### API 호출 예시
+```bash
+# 질문 답변
+curl -X POST http://localhost:8080/agent \
+  -H "Content-Type: application/json" \
+  -d '{"content":"오늘 뭐 먹었어?","user_id":"user123"}'
 
-**일기 생성:**
-```json
-{
-  "content": "오늘 하루 일기 써줘",
-  "user_id": "user123",
-  "current_date": "2026-01-19"
-}
+# 이미지 생성
+curl -X POST http://localhost:8080/agent/image \
+  -H "Content-Type: application/json" \
+  -d '{"content":"이미지 생성해줘","text":"오늘 공원에서 산책했다"}'
 ```
 
-**질문 답변:**
-```json
-{
-  "content": "오늘 뭐 먹었어?",
-  "user_id": "user123",
-  "current_date": "2026-01-19"
-}
-```
+## 배포
 
-**이미지 생성:**
-```json
-{
-  "content": "히스토리 123번 이미지 만들어줘",
-  "user_id": "user123"
-}
-```
-
-**주간 리포트:**
-```json
-{
-  "content": "이번 주 리포트 생성해줘",
-  "user_id": "user123",
-  "start_date": "2026-01-13",
-  "end_date": "2026-01-19"
-}
-```
-
-**데이터 저장:**
-```json
-{
-  "content": "오늘 영화 봤어",
-  "user_id": "user123",
-  "current_date": "2026-01-19"
-}
-```
-
-### 응답 형식
-
-```json
-{
-  "type": "diary|answer|image|report|data",
-  "content": "생성된 내용",
-  "message": "응답 메시지"
-}
-```
-
-## 백엔드 연동
-
-### boto3로 직접 호출 (권장)
-
-```python
-import boto3
-import json
-import uuid
-
-client = boto3.client('bedrock-agentcore', region_name='us-east-1')
-
-payload = {
-    "content": "오늘 뭐 먹었어?",
-    "user_id": "user123",
-    "current_date": "2026-01-19"
-}
-
-response = client.invoke_agent_runtime(
-    agentRuntimeArn="arn:aws:bedrock-agentcore:us-east-1:324547056370:runtime/diary_orchestrator_agent-90S9ctAFht",
-    runtimeSessionId=str(uuid.uuid4()),
-    payload=json.dumps(payload).encode('utf-8'),
-    qualifier="DEFAULT"
-)
-
-# 응답 처리
-content = []
-for chunk in response.get("response", []):
-    content.append(chunk.decode('utf-8'))
-
-result = json.loads(''.join(content))
-```
-
-### 필수 IAM 권한
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["bedrock-agentcore:InvokeAgentRuntime"],
-      "Resource": "arn:aws:bedrock-agentcore:us-east-1:324547056370:runtime/diary_orchestrator_agent-90S9ctAFht"
-    }
-  ]
-}
-```
-
-## 배포 방법
-
-### 자동 배포 (GitHub Actions)
-
+### GitHub Actions (자동)
 ```bash
 git push origin main
 ```
+→ Docker 빌드 → ECR 푸시 → K8s manifest 업데이트 → ArgoCD 배포
 
-**자동 실행 흐름:**
-1. Docker 이미지 빌드
-2. ECR에 푸시 (commit SHA 태그)
-3. Agent Core Runtime 배포
-
-### 로컬에서 배포
-
+### 수동 배포
 ```bash
-export IMAGE_TAG=abc123def456
-python deploy_from_ecr.py
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/ingress.yaml
 ```
-
-### 로그 확인
-
-```bash
-# Agent Core Runtime 로그
-aws logs tail /aws/bedrock-agentcore/runtimes/diary_orchestrator_agent-90S9ctAFht-DEFAULT --follow
-
-# GitHub Actions
-https://github.com/YOUR_USERNAME/YOUR_REPO/actions
-```
-
-## 환경 설정
-
-모든 설정은 AWS Secrets Manager에서 관리됩니다.
-
-### Secrets Manager (`agent-core-secret`)
-```json
-{
-  "KNOWLEDGE_BASE_ID": "LOCNRTBMNB",
-  "KNOWLEDGE_BASE_BUCKET": "knowledge-base-test-6575574",
-  "AWS_REGION": "us-east-1",
-  "BEDROCK_MODEL_ARN": "arn:aws:bedrock:us-east-1:...",
-  "IAM_ROLE_ARN": "arn:aws:iam::...",
-  "BEDROCK_CLAUDE_MODEL_ID": "arn:aws:bedrock:us-east-1:...",
-  "BEDROCK_NOVA_CANVAS_MODEL_ID": "amazon.nova-canvas-v1:0",
-  "BEDROCK_LLM_MODEL_ID": "us.anthropic.claude-sonnet-4-20250514-v1:0"
-}
-```
-
-자세한 내용은 [SECRETS_MANAGER_SETUP.md](./SECRETS_MANAGER_SETUP.md) 참조
 
 ## 기술 스택
 
-- **Runtime**: AWS Agent Core Runtime (Docker 컨테이너)
-- **AI Framework**: Strands Agents
-- **Models**: 
-  - AWS Bedrock Claude Sonnet 4.5 (텍스트 생성)
-  - Amazon Nova Canvas (이미지 생성)
-- **Knowledge Base**: AWS Bedrock Knowledge Base
-- **Database**: PostgreSQL (RDS)
-- **Storage**: Amazon S3
-- **Container**: Docker + Amazon ECR
-- **CI/CD**: GitHub Actions
-- **Secrets**: AWS Secrets Manager
+- **API**: FastAPI
+- **AI**: Strands Agents + AWS Bedrock (Claude Sonnet 4.5, Nova Canvas)
+- **Infrastructure**: Kubernetes (EKS) + ArgoCD
+- **Storage**: S3, PostgreSQL (RDS)
+- **CI/CD**: GitHub Actions + ECR
 
 ## 프로젝트 구조
 
 ```
-.
-├── .github/workflows/
-│   └── deploy-to-ecr.yml           # CI/CD: ECR 빌드 + Agent Core 배포
-├── agent/
-│   ├── utils/
-│   │   └── secrets.py              # Secrets Manager 통합
-│   ├── orchestrator/
-│   │   ├── orchestra_agent.py      # 메인 오케스트레이터 (4개 tool)
-│   │   ├── question/               # 질문 답변 Agent
-│   │   │   └── agent.py
-│   │   ├── summarize/              # 일기 생성 Agent
-│   │   │   └── agent.py
-│   │   ├── image_generator/        # 이미지 생성 Agent (9개 tool)
-│   │   │   ├── agent.py
-│   │   │   ├── tools.py
-│   │   │   └── prompts.py
-│   │   └── weekly_report/          # 주간 리포트 Agent (6개 tool)
-│   │       ├── agent.py
-│   │       ├── tools.py
-│   │       └── prompts.py
-│   └── server.py                   # FastAPI 서버 (단일 진입점)
-├── Dockerfile
-├── deploy_from_ecr.py              # 배포 스크립트
-└── requirements.txt                # 의존성 (로컬 개발 + Docker)
+app/
+├── api/endpoints/     # API 엔드포인트
+├── services/          # Agent 비즈니스 로직
+│   └── orchestrator/  # 각 Agent 구현
+├── core/              # 설정 및 초기화
+└── schemas/           # 요청/응답 스키마
+
+k8s/                   # Kubernetes 매니페스트
+docs/                  # 문서
 ```
 
-## 로컬 개발
+## 라이선스
+MIT License
 
-### 서버 실행
+
+## 빠른 시작
+
+### 로컬 실행
 ```bash
-python agent/server.py
+python run.py
 ```
 
-### 테스트
+### API 호출 예시
 ```bash
-# 헬스체크
-curl http://localhost:8080/ping
+# 질문 답변
+curl -X POST http://localhost:8080/agent \
+  -H "Content-Type: application/json" \
+  -d '{"content":"오늘 뭐 먹었어?","user_id":"user123"}'
+
+# 이미지 생성
+curl -X POST http://localhost:8080/agent/image \
+  -H "Content-Type: application/json" \
+  -d '{"content":"이미지 생성해줘","text":"오늘 공원에서 산책했다"}'
+
+# 주간 리포트
+curl -X POST http://localhost:8080/agent/report \
+  -H "Content-Type: application/json" \
+  -d '{"content":"이번 주 리포트","user_id":"user123"}'
 
 # 일기 생성
-curl -X POST http://localhost:8080/invocations \
+curl -X POST http://localhost:8080/agent/summarize \
   -H "Content-Type: application/json" \
-  -d '{"content":"오늘 하루 일기 써줘","user_id":"user123"}'
+  -d '{"content":"오늘 영화 보고 파스타 먹었어"}'
+```
+
+## 배포
+
+### GitHub Actions (자동)
+```bash
+git push origin main
+```
+→ Docker 빌드 → ECR 푸시 → K8s manifest 업데이트 → ArgoCD 배포
+
+### 수동 배포
+```bash
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/ingress.yaml
+```
+
+### 로그 확인
+```bash
+kubectl logs -f deployment/agent-api-deployment
+```
+
+## 기술 스택
+
+- **API**: FastAPI
+- **AI**: Strands Agents + AWS Bedrock (Claude Sonnet 4.5, Nova Canvas)
+- **Infrastructure**: Kubernetes (EKS) + ArgoCD
+- **Storage**: S3, PostgreSQL (RDS)
+- **CI/CD**: GitHub Actions + ECR
+
+## 프로젝트 구조
+
+```
+app/
+├── api/endpoints/     # API 엔드포인트
+│   ├── agent.py       # 질문 답변 + 데이터 저장
+│   ├── image.py       # 이미지 생성
+│   ├── report.py      # 주간 리포트
+│   └── summarize.py   # 일기 생성
+├── services/          # Agent 비즈니스 로직
+│   └── orchestrator/  # 각 Agent 구현
+├── core/              # 설정 및 초기화
+└── schemas/           # 요청/응답 스키마
+
+k8s/                   # Kubernetes 매니페스트
+docs/                  # 문서
+```
+
+## 환경 변수
+
+```yaml
+AWS_REGION: us-east-1
+KNOWLEDGE_BASE_ID: LOCNRTBMNB
+KNOWLEDGE_BASE_BUCKET: knowledge-base-test-6575574
+BEDROCK_CLAUDE_MODEL_ID: arn:aws:bedrock:...
+BEDROCK_NOVA_CANVAS_MODEL_ID: amazon.nova-canvas-v1:0
 ```
 
 ## 라이선스
