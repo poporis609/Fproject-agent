@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from strands import Agent
 
-os.environ['AWS_REGION'] = 'us-east-1'
+os.environ['AWS_REGION'] = 'ap-northeast-2'
 
 summarize_SYSTEM_PROMPT = """
     당신은 일기를 작성하는 AI 어시스턴트입니다.

@@ -22,7 +22,7 @@ from app.services.utils.secrets import get_config
 config = get_config()
 
 # AWS 설정
-AWS_REGION = config.get("AWS_REGION", os.environ.get("AWS_REGION", "us-east-1"))
+AWS_REGION = config.get("AWS_REGION", os.environ.get("AWS_REGION", "ap-northeast-2"))
 
 # Claude 모델 (에이전트 추론용)
 model = BedrockModel(

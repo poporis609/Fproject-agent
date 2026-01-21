@@ -28,7 +28,7 @@ NOVA_CANVAS_MODEL_ID = config.get("BEDROCK_NOVA_CANVAS_MODEL_ID", "amazon.nova-c
 # Claude 모델 ID
 CLAUDE_MODEL_ID = config.get("BEDROCK_LLM_MODEL_ID", "anthropic.claude-sonnet-4-20250514-v1:0")
 
-AWS_REGION = config.get("AWS_REGION", os.getenv("AWS_REGION", "us-east-1"))
+AWS_REGION = config.get("AWS_REGION", os.getenv("AWS_REGION", "ap-northeast-2"))
 
 print(f"[ImageGenerator] Using Claude Model: {CLAUDE_MODEL_ID}")
 print(f"[ImageGenerator] Using Nova Canvas Model: {NOVA_CANVAS_MODEL_ID}")
