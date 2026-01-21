@@ -7,7 +7,7 @@ on:
       - develop
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: ap-northeast-2
   ECR_REPOSITORY: diary-orchestrator-agent
 
 jobs:
@@ -46,10 +46,10 @@ jobs:
 
       - name: Update Kubernetes manifest
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          sed -i "s|image: .*diary-orchestrator-agent:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" k8s/deployment.yaml
+          # ap-northeast-2 리전의 ECR 이미지로 업데이트
+          sed -i "s|image: 324547056370.dkr.ecr.ap-northeast-2.amazonaws.com/diary-orchestrator-agent:.*|image: 324547056370.dkr.ecr.ap-northeast-2.amazonaws.com/diary-orchestrator-agent:$IMAGE_TAG|g" k8s/deployment.yaml
 
       - name: Commit and push updated manifest
         env:
