@@ -91,7 +91,7 @@ def get_config() -> dict:
         Exception: Secrets Manager에서 설정을 가져올 수 없는 경우
     """
     # Secret 이름 (환경변수 또는 기본값)
-    secret_name = os.environ.get('SECRET_NAME', 'diary-agent-secret')
+    secret_name = os.environ.get('SECRET_NAME', 'agent-core-secret')
     region_name = os.environ.get('AWS_REGION', 'us-east-1')
     
     config = get_secret(secret_name, region_name)

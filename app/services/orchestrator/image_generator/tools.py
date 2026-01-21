@@ -28,10 +28,8 @@ config = get_config()
 
 # Nova Canvas 설정
 NOVA_CANVAS_MODEL_ID = config.get("BEDROCK_NOVA_CANVAS_MODEL_ID", "amazon.nova-canvas-v1:0")
-# Claude 모델 ID - cross-region inference prefix 제거
-CLAUDE_MODEL_ID_RAW = config.get("BEDROCK_LLM_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
-# invoke_model API는 prefix 없이 사용
-CLAUDE_MODEL_ID = CLAUDE_MODEL_ID_RAW.replace("us.", "") if CLAUDE_MODEL_ID_RAW.startswith("us.") else CLAUDE_MODEL_ID_RAW
+# Claude 모델 ID
+CLAUDE_MODEL_ID = config.get("BEDROCK_LLM_MODEL_ID", "anthropic.claude-sonnet-4-20250514-v1:0")
 
 AWS_REGION = config.get("AWS_REGION", os.getenv("AWS_REGION", "us-east-1"))
 S3_BUCKET = config.get("KNOWLEDGE_BASE_BUCKET", os.getenv("KNOWLEDGE_BASE_BUCKET", "knowledge-base-test-6575574"))
