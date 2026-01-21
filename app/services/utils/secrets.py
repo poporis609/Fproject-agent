@@ -86,41 +86,28 @@ def get_config() -> dict:
     
     Returns:
         설정 딕셔너리
+    
+    Raises:
+        Exception: Secrets Manager에서 설정을 가져올 수 없는 경우
     """
     # Secret 이름 (환경변수 또는 기본값)
     secret_name = os.environ.get('SECRET_NAME', 'diary-agent-secret')
     region_name = os.environ.get('AWS_REGION', 'us-east-1')
     
-    try:
-        config = get_secret(secret_name, region_name)
-        print(f"✅ Secrets Manager에서 설정을 가져왔습니다: {secret_name}")
-        
-        # 필수 키 검증
-        required_keys = ['KNOWLEDGE_BASE_ID', 'AWS_REGION']
-        missing_keys = [key for key in required_keys if not config.get(key)]
-        
-        if missing_keys:
-            print(f"⚠️  경고: 다음 필수 키가 누락되었습니다: {', '.join(missing_keys)}")
-        
-        # AWS_REGION은 환경변수 우선
-        if 'AWS_REGION' not in config or not config['AWS_REGION']:
-            config['AWS_REGION'] = region_name
-        
-        return config
-    except Exception as e:
-        print(f"❌ CRITICAL: Secrets Manager에서 설정을 가져올 수 없습니다: {str(e)}")
-        print(f"❌ Secret 이름: {secret_name}")
-        print(f"❌ Region: {region_name}")
-        
-        # 런타임 오류 방지를 위해 기본값 반환 (최소한의 동작 보장)
-        print(f"⚠️  WARNING: 기본값으로 fallback합니다. 일부 기능이 제한될 수 있습니다.")
-        return {
-            'AWS_REGION': region_name,
-            'KNOWLEDGE_BASE_ID': os.environ.get('KNOWLEDGE_BASE_ID', ''),
-            'KNOWLEDGE_BASE_BUCKET': os.environ.get('KNOWLEDGE_BASE_BUCKET', ''),
-            'BEDROCK_MODEL_ARN': os.environ.get('BEDROCK_MODEL_ARN', ''),
-            'IAM_ROLE_ARN': os.environ.get('IAM_ROLE_ARN', ''),
-            'BEDROCK_CLAUDE_MODEL_ID': os.environ.get('BEDROCK_CLAUDE_MODEL_ID', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'),
-            'BEDROCK_NOVA_CANVAS_MODEL_ID': os.environ.get('BEDROCK_NOVA_CANVAS_MODEL_ID', 'amazon.nova-canvas-v1:0'),
-            'BEDROCK_LLM_MODEL_ID': os.environ.get('BEDROCK_LLM_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0'),
-        }
+    config = get_secret(secret_name, region_name)
+    print(f"✅ Secrets Manager에서 설정을 가져왔습니다: {secret_name}")
+    
+    # 필수 키 검증
+    required_keys = ['KNOWLEDGE_BASE_ID', 'AWS_REGION']
+    missing_keys = [key for key in required_keys if not config.get(key)]
+    
+    if missing_keys:
+        error_msg = f"필수 키가 누락되었습니다: {', '.join(missing_keys)}"
+        print(f"❌ {error_msg}")
+        raise ValueError(error_msg)
+    
+    # AWS_REGION은 환경변수 우선
+    if 'AWS_REGION' not in config or not config['AWS_REGION']:
+        config['AWS_REGION'] = region_name
+    
+    return config
