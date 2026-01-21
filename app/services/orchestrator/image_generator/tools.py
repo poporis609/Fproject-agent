@@ -1,15 +1,12 @@
 """
 Image Generator Tools - boto3 기반 직접 AWS 호출
-TypeScript 서비스 없이 독립 실행
+이미지 생성만 담당 (S3 업로드/삭제는 image 서버에서 처리)
 """
 
 import os
 import json
-import base64
 import random
-import time
 import logging
-import asyncio
 from typing import Dict, Any
 from datetime import datetime
 
@@ -32,7 +29,6 @@ NOVA_CANVAS_MODEL_ID = config.get("BEDROCK_NOVA_CANVAS_MODEL_ID", "amazon.nova-c
 CLAUDE_MODEL_ID = config.get("BEDROCK_LLM_MODEL_ID", "anthropic.claude-sonnet-4-20250514-v1:0")
 
 AWS_REGION = config.get("AWS_REGION", os.getenv("AWS_REGION", "us-east-1"))
-S3_BUCKET = config.get("KNOWLEDGE_BASE_BUCKET", os.getenv("KNOWLEDGE_BASE_BUCKET", "knowledge-base-test-6575574"))
 
 print(f"[ImageGenerator] Using Claude Model: {CLAUDE_MODEL_ID}")
 print(f"[ImageGenerator] Using Nova Canvas Model: {NOVA_CANVAS_MODEL_ID}")
@@ -82,7 +78,6 @@ Keep prompt under 500 characters."""
 # ============================================================================
 
 _bedrock_client = None
-_s3_client = None
 
 
 def get_bedrock_client():
@@ -90,13 +85,6 @@ def get_bedrock_client():
     if _bedrock_client is None:
         _bedrock_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
     return _bedrock_client
-
-
-def get_s3_client():
-    global _s3_client
-    if _s3_client is None:
-        _s3_client = boto3.client("s3", region_name=AWS_REGION)
-    return _s3_client
 
 
 # ============================================================================
@@ -195,64 +183,19 @@ def generate_image_with_nova(positive_prompt: str, negative_prompt: str = None) 
         return {"success": False, "error": str(e)}
 
 
-def upload_to_s3(user_id: str, image_base64: str, record_date: str = None) -> Dict[str, str]:
-    """
-    S3에 이미지 업로드
-    경로: {user_id}/history/{년}/{월}/{일}/image_{timestamp}.png
-    """
-    client = get_s3_client()
-    
-    # record_date가 있으면 그 날짜 사용, 없으면 현재 시간
-    if record_date:
-        try:
-            dt = datetime.fromisoformat(record_date.replace('Z', '+00:00'))
-        except:
-            dt = datetime.utcnow()
-    else:
-        dt = datetime.utcnow()
-    
-    year = dt.strftime("%Y")
-    month = dt.strftime("%m")
-    day = dt.strftime("%d")
-    timestamp = int(time.time() * 1000)
-    
-    s3_key = f"{user_id}/history/{year}/{month}/{day}/image_{timestamp}.png"
-    
-    try:
-        image_bytes = base64.b64decode(image_base64)
-        
-        client.put_object(
-            Bucket=S3_BUCKET,
-            Key=s3_key,
-            Body=image_bytes,
-            ContentType="image/png"
-        )
-        
-        image_url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
-        logger.info(f"[S3] Uploaded: {s3_key}")
-        
-        return {
-            "s3_key": s3_key,
-            "image_url": image_url
-        }
-    except Exception as e:
-        logger.error(f"[S3] Upload error: {e}")
-        raise
-
-
 # ============================================================================
-# Tools 클래스 (DB 의존성 없음)
+# Tools 클래스 (이미지 생성만 담당)
 # ============================================================================
 
 class ImageGeneratorTools:
-    """Image Generator Agent의 도구 모음 - DB 없이 동작"""
+    """Image Generator Agent의 도구 모음 - 이미지 생성만 담당"""
     
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
     
     async def generate_image_from_text(self, text: str) -> Dict[str, Any]:
         """
-        텍스트에서 이미지 생성 (미리보기용, S3 업로드 X)
+        텍스트에서 이미지 생성
         
         Args:
             text: 일기 텍스트 (한글)
@@ -285,37 +228,6 @@ class ImageGeneratorTools:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    async def upload_image_to_s3(self, user_id: str, image_base64: str, record_date: str = None) -> Dict[str, Any]:
-        """
-        이미지를 S3에 업로드 (히스토리에 추가 버튼용)
-        
-        Args:
-            user_id: 사용자 ID (cognito_sub)
-            image_base64: 업로드할 이미지 (base64)
-            record_date: 기록 날짜 (선택, ISO format)
-        
-        Returns:
-            s3_key: S3 키
-            image_url: 이미지 URL
-        """
-        try:
-            if not user_id:
-                return {"success": False, "error": "user_id is required"}
-            
-            if not image_base64:
-                return {"success": False, "error": "image_base64 is required"}
-            
-            s3_result = upload_to_s3(user_id, image_base64, record_date)
-            
-            return {
-                "success": True,
-                "user_id": user_id,
-                "s3_key": s3_result["s3_key"],
-                "image_url": s3_result["image_url"]
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
     async def build_prompt_from_text(self, text: str) -> Dict[str, Any]:
         """프롬프트만 생성 (이미지 생성 없음)"""
         try:
@@ -335,6 +247,5 @@ class ImageGeneratorTools:
             "success": True,
             "status": "ok",
             "service": "image-generator-agent",
-            "s3_bucket": S3_BUCKET,
             "timestamp": datetime.utcnow().isoformat()
         }
