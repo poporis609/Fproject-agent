@@ -81,8 +81,9 @@ ORCHESTRATOR_PROMPT = """
    - type: "data", content: "", message: "메시지가 저장되었습니다."
 
 5. tool 결과 처리:
-   - tool 결과를 적절히 content에 담습니다
+   - generate_auto_response를 호출한 경우: tool이 반환한 response 값을 content에 그대로 담습니다
    - no_processing인 경우 content는 빈 문자열("")입니다
+   - ⚠️ 중요: tool 결과의 "response" 필드 값을 content에 넣어야 합니다
 </작업순서>
 
 <응답 형식>
@@ -96,8 +97,10 @@ ORCHESTRATOR_PROMPT = """
 - 질문은 반드시 generate_auto_response tool을 사용해야 합니다
 - generate_auto_response 호출 시 user_id와 current_date가 제공되면 반드시 함께 전달해야 합니다
 - 단순 데이터 입력은 tool을 사용하지 않고 type: "data"로 반환합니다
+- generate_auto_response tool의 결과에서 "response" 필드 값을 content에 그대로 넣어야 합니다
 - tool 결과를 수정하거나 추가 설명을 붙이지 마세요
 - 응답은 반드시 type, content, message 세 필드를 포함해야 합니다
+- content에는 실제 답변 내용이 들어가야 하며, "호출했습니다" 같은 메타 정보가 아닙니다
 </필수규칙>
 
 """
@@ -158,6 +161,15 @@ def orchestrate_request(
     
     orchestrator_agent(prompt)
 
+    # Tool 결과 추출
+    tool_results = []
+    for m in orchestrator_agent.messages:
+        for content in m.get("content", []):
+            if "toolResult" in content:
+                tool_result = content["toolResult"]
+                print(f"[DEBUG] Tool result found: {str(tool_result)[:200]}...")
+                tool_results.append(tool_result)
+
     result = orchestrator_agent.structured_output(
         OrchestratorResult, "사용자 요청에 대한 처리 결과를 구조화된 형태로 추출하시오"
     )
@@ -170,5 +182,23 @@ def orchestrate_request(
     else:
         result_dict = result
 
+    # Tool 결과가 있고 type이 answer인 경우, content가 비어있으면 tool 결과로 채움
+    if tool_results and result_dict.get("type") == "answer":
+        if not result_dict.get("content") or result_dict.get("content") == "":
+            # generate_auto_response의 결과에서 response 추출
+            for tool_result in tool_results:
+                if isinstance(tool_result, dict) and "content" in tool_result:
+                    tool_content = tool_result["content"]
+                    if isinstance(tool_content, list):
+                        for item in tool_content:
+                            if isinstance(item, dict) and "json" in item:
+                                json_data = item["json"]
+                                if isinstance(json_data, dict) and "response" in json_data:
+                                    result_dict["content"] = json_data["response"]
+                                    print(f"[DEBUG] Content extracted from tool result: {result_dict['content'][:100]}...")
+                                    break
+                    break
+
+    print(f"[DEBUG] Final result - type: {result_dict.get('type')}, content length: {len(str(result_dict.get('content', '')))} chars")
     print(f"[DEBUG] ========== orchestrate_request 완료 ==========")
     return result_dict
