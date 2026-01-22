@@ -76,6 +76,7 @@ SELLER_ANSWER_PROMPT = """
 단, 공손한 톤이어야 합니다. 
 """
 
+@tool
 def generate_auto_response(question: str, user_id: str = None, current_date: str = None) -> Dict[str, Any]:
     """
     질문에 대한 답변을 생성하는 함수
