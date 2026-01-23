@@ -69,7 +69,7 @@ def init_tracing(config: TracingConfig) -> bool:
     global _tracer_provider, _tracing_enabled
     
     if not config.enabled:
-        logger.info("트레이싱이 비활성화되어 있습니다 (TRACING_ENABLED=false)")
+        print("트레이싱이 비활성화되어 있습니다 (TRACING_ENABLED=false)")
         _tracing_enabled = False
         return True
     
@@ -106,36 +106,37 @@ def init_tracing(config: TracingConfig) -> bool:
         trace.set_tracer_provider(tracer_provider)
         _tracer_provider = tracer_provider
         
-        logger.info(f"✅ Phoenix gRPC endpoint: {grpc_endpoint}")
+        print(f"✅ Phoenix gRPC endpoint: {grpc_endpoint}")
         
         # Bedrock Instrumentor 활성화
         try:
             from openinference.instrumentation.bedrock import BedrockInstrumentor
             BedrockInstrumentor().instrument(tracer_provider=tracer_provider)
-            logger.info("✅ Bedrock Instrumentor 활성화됨")
+            print("✅ Bedrock Instrumentor 활성화됨")
         except ImportError:
-            logger.warning("⚠️ openinference-instrumentation-bedrock 패키지가 설치되지 않았습니다")
+            print("⚠️ openinference-instrumentation-bedrock 패키지가 설치되지 않았습니다")
         except Exception as e:
-            logger.warning(f"⚠️ Bedrock Instrumentor 활성화 실패: {e}")
+            print(f"⚠️ Bedrock Instrumentor 활성화 실패: {e}")
         
         _tracing_enabled = True
-        logger.info(f"✅ Phoenix 트레이싱 초기화 완료")
-        logger.info(f"   - Project: {config.project_name}")
-        logger.info(f"   - Sample Rate: {config.sample_rate}")
-        logger.info(f"   - Debug Mode: {config.debug_mode}")
+        print(f"✅ Phoenix 트레이싱 초기화 완료")
+        print(f"   - Project: {config.project_name}")
+        print(f"   - Sample Rate: {config.sample_rate}")
         
         return True
         
     except ImportError as e:
-        logger.warning(f"⚠️ Phoenix 라이브러리 누락, 트레이싱 비활성화: {e}")
+        print(f"⚠️ Phoenix 라이브러리 누락, 트레이싱 비활성화: {e}")
         _tracing_enabled = False
         return False
     except ConnectionError as e:
-        logger.warning(f"⚠️ Phoenix 연결 실패, 트레이싱 비활성화: {e}")
+        print(f"⚠️ Phoenix 연결 실패, 트레이싱 비활성화: {e}")
         _tracing_enabled = False
         return False
     except Exception as e:
-        logger.error(f"❌ 트레이싱 초기화 실패: {e}")
+        print(f"❌ 트레이싱 초기화 실패: {e}")
+        import traceback
+        traceback.print_exc()
         _tracing_enabled = False
         return False
 
