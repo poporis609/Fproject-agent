@@ -32,6 +32,7 @@ class TracingConfig:
     enabled: bool = field(default_factory=lambda: os.getenv("TRACING_ENABLED", "true").lower() == "true")
     debug_mode: bool = field(default_factory=lambda: os.getenv("DEBUG", "false").lower() == "true")
     sample_rate: float = field(default_factory=lambda: float(os.getenv("TRACE_SAMPLE_RATE", "1.0")))
+    jaeger_endpoint: Optional[str] = field(default_factory=lambda: os.getenv("JAEGER_ENDPOINT", None))
     batch_export: bool = True
     headers: Optional[dict] = None
     
@@ -48,5 +49,6 @@ class TracingConfig:
             "enabled": self.enabled,
             "debug_mode": self.debug_mode,
             "sample_rate": self.sample_rate,
+            "jaeger_endpoint": self.jaeger_endpoint,
             "batch_export": self.batch_export,
         }
