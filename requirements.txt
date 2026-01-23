@@ -25,6 +25,7 @@ uvicorn[standard]>=0.27.0
 pydantic-settings>=2.1.0
 
 # Phoenix Monitoring (Arize Phoenix)
+arize-phoenix>=8.0.0
 arize-phoenix-otel>=0.6.0
 openinference-instrumentation-bedrock>=0.1.30
 arize-phoenix-evals>=0.17.0
