@@ -6,18 +6,16 @@ Strands Agent의 Bedrock LLM 호출을 자동으로 계측합니다.
 """
 import logging
 import os
-from typing import Optional
+from typing import Optional, Any
 
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
 from .config import TracingConfig
 
 logger = logging.getLogger(__name__)
 
 # 전역 상태
-_tracer_provider: Optional[TracerProvider] = None
+_tracer_provider: Optional[Any] = None
 _tracing_enabled: bool = False
 
 
@@ -75,11 +73,12 @@ def init_tracing(config: TracingConfig) -> bool:
         return True
     
     try:
+        # Phoenix SDK가 PHOENIX_COLLECTOR_ENDPOINT 환경변수를 사용하도록 설정
+        # import 전에 설정해야 함
+        os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = config.phoenix_endpoint
+        
         # Phoenix OTEL 사용 (HTTP exporter)
         from phoenix.otel import register
-        
-        # Phoenix SDK가 PHOENIX_COLLECTOR_ENDPOINT 환경변수를 사용하도록 설정
-        os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = config.phoenix_endpoint
         
         # Phoenix에 트레이서 등록
         tracer_provider = register(
