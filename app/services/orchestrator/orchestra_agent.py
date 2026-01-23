@@ -207,7 +207,7 @@ def orchestrate_request(
             if eval_result.error:
                 print(f"[DEBUG] Evaluation skipped: {eval_result.error}")
             else:
-                print(f"[DEBUG] Evaluation - Hallucination: {eval_result.hallucination_score}, Relevance: {eval_result.relevance_score}")
+                print(f"[DEBUG] Evaluation started in background")
         except Exception as e:
             print(f"[DEBUG] Evaluation failed: {e}")
 
