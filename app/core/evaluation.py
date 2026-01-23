@@ -65,11 +65,12 @@ def run_evaluation(
         )
         from phoenix.evals.models import BedrockModel
         from phoenix.trace import SpanEvaluations
-        from phoenix import Client
+        import phoenix as px
         
-        # Phoenix Client 초기화 (base_url 명시)
-        print(f"[DEBUG] Connecting to Phoenix at: {config.phoenix_base_url}")
-        phoenix_client = Client(base_url=config.phoenix_base_url)
+        # Phoenix Client 초기화 (환경변수 PHOENIX_BASE_URL 사용)
+        # deployment.yaml에서 PHOENIX_BASE_URL=http://phoenix-service:6006 설정됨
+        print(f"[DEBUG] Connecting to Phoenix (PHOENIX_BASE_URL env var)")
+        phoenix_client = px.Client()
         
         # 최근 스팬 가져오기
         spans_df = phoenix_client.get_spans_dataframe(project_name=config.project_name)
