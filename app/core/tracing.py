@@ -88,6 +88,22 @@ def init_tracing(config: TracingConfig) -> bool:
         
         _tracer_provider = tracer_provider
         
+        # Jaeger exporter 추가 (Multi-Exporter)
+        jaeger_endpoint = config.jaeger_endpoint
+        if jaeger_endpoint:
+            try:
+                from opentelemetry.sdk.trace.export import BatchSpanProcessor
+                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+                
+                jaeger_exporter = OTLPSpanExporter(
+                    endpoint=jaeger_endpoint,
+                    insecure=True
+                )
+                tracer_provider.add_span_processor(BatchSpanProcessor(jaeger_exporter))
+                logger.info(f"✅ Jaeger exporter 추가됨: {jaeger_endpoint}")
+            except Exception as e:
+                logger.warning(f"⚠️ Jaeger exporter 추가 실패: {e}")
+        
         # Bedrock Instrumentor 활성화
         try:
             from openinference.instrumentation.bedrock import BedrockInstrumentor
