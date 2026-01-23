@@ -8,10 +8,9 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional
 
 import pandas as pd
-from opentelemetry import trace
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,7 @@ class EvaluationConfig:
     hallucination_check: bool = True
     relevance_check: bool = True
     evaluator_model: str = field(default_factory=lambda: os.getenv("EVALUATOR_MODEL", "anthropic.claude-3-haiku-20240307-v1:0"))
+    project_name: str = field(default_factory=lambda: os.getenv("PHOENIX_PROJECT_NAME", "diary-agent"))
 
 
 @dataclass
@@ -43,6 +43,7 @@ def run_evaluation(
 ) -> EvaluationResult:
     """
     LLM 응답 품질을 평가하고 Phoenix에 업로드합니다.
+    Phoenix Client에서 최근 스팬을 가져와서 평가합니다.
     """
     if config is None:
         config = EvaluationConfig()
@@ -55,17 +56,6 @@ def run_evaluation(
     
     result = EvaluationResult(evaluated_at=datetime.now())
     
-    # 현재 스팬 ID 가져오기
-    current_span = trace.get_current_span()
-    span_id = None
-    if current_span and current_span.is_recording():
-        span_id = format(current_span.get_span_context().span_id, '016x')
-        result.span_id = span_id
-    
-    if not span_id:
-        result.error = "No active span"
-        return result
-    
     try:
         from phoenix.evals import (
             HallucinationEvaluator,
@@ -75,6 +65,21 @@ def run_evaluation(
         from phoenix.evals.models import BedrockModel
         from phoenix.trace import SpanEvaluations
         import phoenix as px
+        
+        # Phoenix Client로 최근 스팬 가져오기
+        phoenix_client = px.Client()
+        spans_df = phoenix_client.get_spans_dataframe(project_name=config.project_name)
+        
+        if spans_df is None or len(spans_df) == 0:
+            result.error = "No spans found in Phoenix"
+            return result
+        
+        # 가장 최근 LLM 스팬 찾기
+        recent_span = spans_df.iloc[0]
+        span_id = recent_span.name  # index가 span_id
+        result.span_id = str(span_id)
+        
+        print(f"[DEBUG] Found recent span: {span_id}")
         
         # Bedrock 모델 설정
         os.environ['AWS_DEFAULT_REGION'] = os.getenv("AWS_REGION", "ap-northeast-2")
@@ -86,8 +91,6 @@ def run_evaluation(
             "output": output_text,
             "reference": reference_text or ""
         }])
-        
-        phoenix_client = px.Client()
         
         # Relevance 평가
         if config.relevance_check:
@@ -106,7 +109,7 @@ def run_evaluation(
                     SpanEvaluations(eval_name="relevance", dataframe=rel_df)
                 )
                 result.relevance_label = rel_df.iloc[0].get("label", "unknown")
-                print(f"[DEBUG] Relevance: {result.relevance_label}")
+                print(f"[DEBUG] Relevance uploaded: {result.relevance_label}")
         
         # Hallucination 평가 (reference가 있을 때만)
         if config.hallucination_check and reference_text:
@@ -125,7 +128,7 @@ def run_evaluation(
                     SpanEvaluations(eval_name="hallucination", dataframe=hal_df)
                 )
                 result.hallucination_label = hal_df.iloc[0].get("label", "unknown")
-                print(f"[DEBUG] Hallucination: {result.hallucination_label}")
+                print(f"[DEBUG] Hallucination uploaded: {result.hallucination_label}")
         
         logger.info(f"✅ 평가 완료 - Relevance: {result.relevance_label}, Hallucination: {result.hallucination_label}")
         
