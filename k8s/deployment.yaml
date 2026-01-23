@@ -59,6 +59,8 @@ spec:
             # Phoenix Tracing 설정
             - name: PHOENIX_ENDPOINT
               value: "http://phoenix-service:6006"
+            - name: PHOENIX_BASE_URL
+              value: "http://phoenix-service:6006"
             - name: PHOENIX_PROJECT_NAME
               value: "diary-agent"
             - name: TRACING_ENABLED
