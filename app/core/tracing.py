@@ -74,19 +74,39 @@ def init_tracing(config: TracingConfig) -> bool:
         return True
     
     try:
-        # Phoenix OTEL 등록
-        from phoenix.otel import register
+        from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         
-        # 샘플링 설정
-        sampler = TraceIdRatioBased(config.sample_rate)
+        # 리소스 설정
+        resource = Resource.create({
+            SERVICE_NAME: config.project_name,
+            "service.version": "1.0.0",
+        })
         
-        # Phoenix에 트레이서 등록
-        tracer_provider = register(
-            project_name=config.project_name,
-            endpoint=config.phoenix_endpoint,
+        # TracerProvider 생성
+        tracer_provider = TracerProvider(
+            resource=resource,
+            sampler=TraceIdRatioBased(config.sample_rate)
         )
         
+        # Phoenix gRPC endpoint (4317 포트)
+        grpc_endpoint = config.phoenix_endpoint.replace(":6006", ":4317")
+        if ":4317" not in grpc_endpoint:
+            grpc_endpoint = grpc_endpoint.rstrip("/") + ":4317" if ":" not in grpc_endpoint.split("/")[-1] else grpc_endpoint
+        
+        # gRPC exporter 설정
+        otlp_exporter = OTLPSpanExporter(
+            endpoint=grpc_endpoint.replace("http://", "").replace("https://", ""),
+            insecure=True
+        )
+        tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+        
+        # 전역 TracerProvider 설정
+        trace.set_tracer_provider(tracer_provider)
         _tracer_provider = tracer_provider
+        
+        logger.info(f"✅ Phoenix gRPC endpoint: {grpc_endpoint}")
         
         # Bedrock Instrumentor 활성화
         try:
@@ -100,7 +120,6 @@ def init_tracing(config: TracingConfig) -> bool:
         
         _tracing_enabled = True
         logger.info(f"✅ Phoenix 트레이싱 초기화 완료")
-        logger.info(f"   - Endpoint: {config.phoenix_endpoint}")
         logger.info(f"   - Project: {config.project_name}")
         logger.info(f"   - Sample Rate: {config.sample_rate}")
         logger.info(f"   - Debug Mode: {config.debug_mode}")
