@@ -175,6 +175,25 @@ def _extract_tool_results(agent: Agent) -> tuple[list, Optional[str]]:
     return tool_results, reference_text
 
 
+def _is_likely_question(text: str) -> bool:
+    """
+    텍스트가 질문인지 빠르게 판단하는 사전 필터링 (LLM 호출 없이)
+    """
+    question_patterns = [
+        '?', '했어?', '뭐야', '뭐에요', '뭔가요',
+        '언제', '어디', '누가', '누구', '왜', '어떻게', '어떤',
+        '몇', '얼마', '알려줘', '알려주세요', '가르쳐',
+        '있어?', '있나요', '있을까', '없어?', '없나요',
+        '할까', '할까요', '해줘', '해주세요', '해줄래',
+        '볼까', '볼래', '먹을까', '갈까',
+        '맞아?', '맞나요', '아니야?', '아닌가요',
+        '인가요', '인가', '일까', '일까요',
+        '줄래', '줄까', '줄 수', '수 있어', '수 있나요',
+        '뭘', '뭐를', '무엇', '무슨', '뭐했', '뭐 했',
+    ]
+    return any(pattern in text for pattern in question_patterns)
+
+
 def orchestrate_request(
     user_input: str,
     user_id: Optional[str] = None,
@@ -183,7 +202,7 @@ def orchestrate_request(
     """
     사용자 요청을 분석하여 적절한 처리 수행
     
-    최적화: structured_output 대신 JSON 직접 파싱으로 LLM 호출 1회 절감
+    최적화: 키워드 필터링으로 orchestrator LLM 호출 완전 스킵 (~6초)
 
     Args:
         user_input (str): 사용자 입력 데이터
@@ -200,78 +219,54 @@ def orchestrate_request(
     print(f"[DEBUG] ========== orchestrate_request 시작 ==========")
     print(f"[DEBUG] user_input: {user_input[:100]}...")
     
-    # 각 요청마다 새로운 Agent 생성
-    orchestrator_agent = Agent(
-        model=BEDROCK_MODEL_ARN,
-        tools=[generate_auto_response],
-        system_prompt=ORCHESTRATOR_PROMPT,
-    )
-
-    # orchestrator에게 요청 처리
-    prompt = f"""
-사용자 요청을 분석하고 적절한 처리를 수행하세요.
-
-<user_input>{user_input}</user_input>
-"""
+    # 키워드 기반 사전 필터링 (LLM 호출 없이 즉시 판단)
+    if not _is_likely_question(user_input):
+        print(f"[DEBUG] 사전 필터링: 질문 패턴 없음 → 데이터로 바로 반환 (LLM 스킵)")
+        return {
+            "type": "data",
+            "content": "",
+            "message": "메시지가 저장되었습니다."
+        }
     
-    # user_id 추가
-    if user_id:
-        prompt += f"\n<user_id>{user_id}</user_id>\n⚠️ 중요: generate_auto_response 호출 시 이 user_id를 반드시 전달하세요!"
+    print(f"[DEBUG] 사전 필터링: 질문 패턴 감지 → generate_auto_response 직접 호출")
     
-    # current_date 추가
-    if current_date:
-        prompt += f"\n<current_date>{current_date}</current_date>\n⚠️ 중요: generate_auto_response 호출 시 이 current_date를 반드시 전달하세요!"
-    
-    prompt += "\n\n작업 완료 후 반드시 JSON 형식으로만 최종 응답하세요."
-    
-    # Agent 호출
-    response = orchestrator_agent(prompt)
-    
-    # Tool 결과 및 reference 추출
-    tool_results, reference_text = _extract_tool_results(orchestrator_agent)
-    
-    # JSON 직접 파싱 (structured_output 대신 - LLM 호출 1회 절감)
-    result_dict = _parse_json_response(response)
-    
-    # 필수 필드 검증
-    if "type" not in result_dict:
-        result_dict["type"] = "data"
-    if "content" not in result_dict:
-        result_dict["content"] = ""
-    if "message" not in result_dict:
-        result_dict["message"] = "처리가 완료되었습니다."
-
-    # Tool 결과가 있고 type이 answer인 경우, content가 비어있으면 tool 결과로 채움
-    if tool_results and result_dict.get("type") == "answer":
-        if not result_dict.get("content") or result_dict.get("content") == "":
-            for tool_result in tool_results:
-                if isinstance(tool_result, dict) and "content" in tool_result:
-                    tool_content = tool_result["content"]
-                    if isinstance(tool_content, list):
-                        for item in tool_content:
-                            if isinstance(item, dict) and "json" in item:
-                                json_data = item["json"]
-                                if isinstance(json_data, dict) and "response" in json_data:
-                                    result_dict["content"] = json_data["response"]
-                                    print(f"[DEBUG] Content extracted from tool result: {result_dict['content'][:100]}...")
-                                break
-                    break
-
-    # 평가 실행 (answer 타입인 경우에만)
-    if result_dict.get("type") == "answer" and result_dict.get("content"):
-        try:
-            eval_result = run_evaluation(
-                input_text=user_input,
-                output_text=result_dict["content"],
-                reference_text=reference_text
-            )
-            if eval_result.error:
-                print(f"[DEBUG] Evaluation skipped: {eval_result.error}")
-            else:
-                print(f"[DEBUG] Evaluation started in background")
-        except Exception as e:
-            print(f"[DEBUG] Evaluation failed: {e}")
-
-    print(f"[DEBUG] Final result - type: {result_dict.get('type')}, content length: {len(str(result_dict.get('content', '')))} chars")
-    print(f"[DEBUG] ========== orchestrate_request 완료 ==========")
-    return result_dict
+    # 질문인 경우 generate_auto_response 직접 호출 (orchestrator LLM 완전 스킵)
+    try:
+        response = generate_auto_response(
+            question=user_input,
+            user_id=user_id,
+            current_date=current_date
+        )
+        
+        answer_content = response.get("response", "")
+        reference_text = response.get("reference")
+        
+        # 평가 실행 (answer 타입인 경우에만)
+        if answer_content:
+            try:
+                eval_result = run_evaluation(
+                    input_text=user_input,
+                    output_text=answer_content,
+                    reference_text=reference_text
+                )
+                if eval_result.error:
+                    print(f"[DEBUG] Evaluation skipped: {eval_result.error}")
+                else:
+                    print(f"[DEBUG] Evaluation started in background")
+            except Exception as e:
+                print(f"[DEBUG] Evaluation failed: {e}")
+        
+        print(f"[DEBUG] ========== orchestrate_request 완료 ==========")
+        return {
+            "type": "answer",
+            "content": answer_content,
+            "message": "질문에 대한 답변입니다."
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] generate_auto_response 실패: {str(e)}")
+        return {
+            "type": "answer",
+            "content": "",
+            "message": f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+        }
