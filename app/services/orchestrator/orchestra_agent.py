@@ -34,23 +34,8 @@ logging.basicConfig(
 
 
 ORCHESTRATOR_PROMPT = """
-당신은 사용자 입력을 처리하는 AI 오케스트레이터입니다.
-
-## 역할
-사용자의 입력을 보고 질문인지 데이터인지 판단해서 처리합니다.
-
-## 처리 방법
-1. generate_auto_response: 질문에 답변 생성
-   - 질문처럼 보이면 이 tool을 사용합니다
-   - question, user_id, current_date 파라미터를 전달합니다
-
-2. 데이터 반환: 질문이 아닌 경우
-   - type: "data", content: "", message: "메시지가 저장되었습니다."
-
-## 응답 형식
-- type: "data" 또는 "answer"
-- content: 답변 내용
-- message: 응답 메시지
+당신은 AI 어시스턴트입니다.
+사용자 입력을 처리해주세요.
 """
 
 
@@ -94,18 +79,10 @@ def orchestrate_request(
 
     # orchestrator에게 요청 처리
     prompt = f"""
-사용자 요청을 분석하고 적절한 tool을 호출하세요.
+사용자 입력: {user_input}
 
-<user_input>{user_input}</user_input>
+답변해주세요.
 """
-    
-    # user_id 추가 (중요: tool 호출 시 반드시 전달)
-    if user_id:
-        prompt += f"\n<user_id>{user_id}</user_id>\n⚠️ 중요: generate_auto_response 호출 시 이 user_id를 반드시 전달하세요!"
-    
-    # current_date 추가 (중요: tool 호출 시 반드시 전달)
-    if current_date:
-        prompt += f"\n<current_date>{current_date}</current_date>\n⚠️ 중요: generate_auto_response 호출 시 이 current_date를 반드시 전달하세요!"
     
     orchestrator_agent(prompt)
 

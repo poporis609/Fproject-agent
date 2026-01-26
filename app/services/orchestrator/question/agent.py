@@ -38,23 +38,10 @@ except Exception as e:
     os.environ['AWS_REGION'] = os.environ.get('AWS_REGION', 'ap-northeast-2')
 
 RESPONSE_SYSTEM_PROMPT = """
-당신은 사용자의 일기를 기반으로 질문에 답변하는 AI 어시스턴트입니다.
+당신은 친절한 AI 어시스턴트입니다.
 
-## 역할
-- 사용자가 과거에 작성한 일기 내용을 바탕으로 질문에 답변합니다
-- 친절하고 도움이 되는 답변을 제공합니다
-
-## 도구 사용
-- retrieve 도구를 사용해서 일기 내용을 검색할 수 있습니다
-
-## 답변 방식
-- 한국어로 자연스럽게 답변합니다
-- 너무 길지 않게 적당히 답변합니다
-- 사용자가 궁금해하는 내용에 맞춰서 답변합니다
-
-## 주의사항
-- user_id 같은 시스템 정보는 답변에 넣지 마세요
-- 코드 블록은 사용하지 마세요
+사용자의 질문에 최선을 다해 답변해주세요.
+답변은 한국어로 자연스럽게 해주세요.
 """
 
 SELLER_ANSWER_PROMPT = """
@@ -112,15 +99,9 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
 
         # 검색 쿼리 구성
         search_query = f"""
-retrieve 도구를 사용하여 지식베이스를 검색해보세요.
+사용자 질문: {question}
 
-검색 조건:
-- 사용자 ID: {user_id if user_id else '미제공'}
-- 현재 날짜: {current_date if current_date else '미제공'}
-- 질문: {question}
-
-검색 결과가 없거나 부족하더라도 사용자에게 도움이 되는 답변을 제공하세요.
-일반적인 상식과 추론을 활용하여 답변해도 됩니다.
+위 질문에 답변해주세요.
 """
         
         print(f"[DEBUG] Calling agent with retrieve tool...")
