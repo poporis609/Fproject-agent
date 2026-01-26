@@ -49,6 +49,31 @@ class OrchestratorResult(BaseModel):
     message: str = Field(description="응답 메시지")
 
 
+def _is_likely_question(text: str) -> bool:
+    """
+    텍스트가 질문인지 빠르게 판단하는 사전 필터링
+    
+    Returns:
+        True: 질문일 가능성이 높음 (Agent 호출 필요)
+        False: 단순 데이터일 가능성이 높음 (바로 반환)
+    """
+    # 의문형 패턴
+    question_patterns = [
+        '?', '했어?', '뭐야', '뭐에요', '뭔가요',
+        '언제', '어디', '누가', '누구', '왜', '어떻게', '어떤',
+        '몇', '얼마', '알려줘', '알려주세요', '가르쳐',
+        '있어?', '있나요', '있을까', '없어?', '없나요',
+        '할까', '할까요', '해줘', '해주세요', '해줄래',
+        '볼까', '볼래', '먹을까', '갈까',
+        '맞아?', '맞나요', '아니야?', '아닌가요',
+        '인가요', '인가', '일까', '일까요',
+        '줄래', '줄까', '줄 수', '수 있어', '수 있나요',
+        '뭘', '뭐를', '무엇', '무슨',
+    ]
+    
+    return any(pattern in text for pattern in question_patterns)
+
+
 def orchestrate_request(
     user_input: str,
     user_id: Optional[str] = None,
@@ -71,6 +96,17 @@ def orchestrate_request(
     
     print(f"[DEBUG] ========== orchestrate_request 시작 ==========")
     print(f"[DEBUG] user_input: {user_input[:100]}...")
+    
+    # 빠른 필터링: 의문형 패턴이 없으면 LLM 호출 없이 바로 데이터로 처리
+    if not _is_likely_question(user_input):
+        print(f"[DEBUG] 사전 필터링: 질문 패턴 없음 → 데이터로 바로 반환")
+        return {
+            "type": "data",
+            "content": "",
+            "message": "메시지가 저장되었습니다."
+        }
+    
+    print(f"[DEBUG] 사전 필터링: 질문 패턴 감지 → Agent 호출")
     
     # 각 요청마다 새로운 Agent 생성
     orchestrator_agent = Agent(
