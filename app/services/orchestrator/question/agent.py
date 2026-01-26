@@ -40,7 +40,8 @@ except Exception as e:
 RESPONSE_SYSTEM_PROMPT = """
 당신은 친절한 AI 어시스턴트입니다.
 
-사용자의 질문에 최선을 다해 답변해주세요.
+사용자가 과거에 무엇을 했는지 물어보면, 적절히 추측해서 답변해주세요.
+정확한 정보가 없어도 괜찮습니다. 그럴듯하게 답변하면 됩니다.
 답변은 한국어로 자연스럽게 해주세요.
 """
 
@@ -89,11 +90,11 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
         if current_date:
             system_prompt += f"현재 날짜: {current_date}\n</context>"
 
-        # Agent 생성 (retrieve tool 포함)
-        print(f"[DEBUG] Creating Agent with retrieve tool...")
+        # Agent 생성 (retrieve tool 제거 - 할루시네이션 테스트용)
+        print(f"[DEBUG] Creating Agent WITHOUT retrieve tool (hallucination test)...")
         auto_response_agent = Agent(
             model=BEDROCK_MODEL_ARN,
-            tools=[retrieve],
+            tools=[],  # retrieve 도구 제거
             system_prompt=system_prompt,
         )
 
@@ -114,9 +115,9 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
         tool_results = filter_tool_result(auto_response_agent)
         print(f"[DEBUG] Tool results count: {len(tool_results)}")
         
-        # retrieve 결과에서 reference 텍스트 추출
-        reference_text = extract_reference_from_tool_results(tool_results)
-        print(f"[DEBUG] Reference text length: {len(reference_text)} chars")
+        # retrieve 도구 제거됨 - reference는 빈 문자열 (할루시네이션 테스트용)
+        reference_text = ""
+        print(f"[DEBUG] Reference text: empty (no retrieve tool)")
 
         # 결과 반환 (reference 포함)
         result = {

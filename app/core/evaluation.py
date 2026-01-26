@@ -117,12 +117,21 @@ def run_evaluation(
                 result.relevance_label = rel_df.iloc[0].get("label", "unknown")
                 print(f"[DEBUG] Relevance uploaded: {result.relevance_label}")
         
-        # Hallucination 평가 (reference가 있을 때만)
-        if config.hallucination_check and reference_text:
+        # Hallucination 평가 (reference 없어도 실행 - 할루시네이션 테스트용)
+        if config.hallucination_check:
             print("[DEBUG] Running Hallucination evaluation...")
             hallucination_eval = HallucinationEvaluator(eval_model)
+            
+            # reference가 없으면 빈 문자열 사용 (검색 결과 없음 = 모든 답변이 할루시네이션)
+            eval_reference = reference_text if reference_text else "정보 없음"
+            eval_df_hal = pd.DataFrame([{
+                "input": input_text,
+                "output": output_text,
+                "reference": eval_reference
+            }])
+            
             hallucination_results = run_evals(
-                dataframe=eval_df,
+                dataframe=eval_df_hal,
                 evaluators=[hallucination_eval],
                 provide_explanation=True
             )
