@@ -103,11 +103,27 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
             system_prompt=system_prompt,
         )
 
-        # 검색 쿼리 구성 - user_id를 쿼리에 포함시켜 검색 정확도 향상
+        # "오늘", "어제" 등의 상대적 날짜 표현을 실제 날짜로 변환
+        search_question = question
+        if current_date:
+            # 오늘/어제 등의 표현이 있으면 실제 날짜로 대체하여 검색 정확도 향상
+            if "오늘" in question:
+                search_question = question.replace("오늘", current_date)
+            elif "어제" in question:
+                from datetime import datetime, timedelta
+                try:
+                    today = datetime.strptime(current_date, "%Y-%m-%d")
+                    yesterday = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+                    search_question = question.replace("어제", yesterday)
+                except:
+                    pass
+
+        # 검색 쿼리 구성 - user_id와 날짜를 쿼리에 포함시켜 검색 정확도 향상
         search_query = f"""
 retrieve 도구를 사용하여 다음 조건으로 검색하세요:
 
-검색어: "{question} 사용자:{user_id if user_id else ''}"
+검색어: "{search_question} 사용자:{user_id if user_id else ''}"
+현재 날짜: {current_date if current_date else '미제공'}
 
 검색 후 반드시 검색 결과를 확인하고, 결과가 있으면 그 내용을 바탕으로 답변하세요.
 검색 결과가 비어있는 경우에만 "기록이 없습니다"라고 답변하세요.
