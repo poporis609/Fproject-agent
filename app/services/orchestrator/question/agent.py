@@ -42,10 +42,12 @@ RESPONSE_SYSTEM_PROMPT = """
 
 규칙:
 1. 반드시 retrieve 도구로 검색 먼저 실행
-2. 검색 결과에 있는 내용만 답변
-3. 검색 결과 없으면 "기록이 없습니다"로 답변
+2. retrieve 결과에 "날짜:" 또는 "내용:"이 포함되어 있으면 검색 성공 → 해당 내용으로 답변
+3. retrieve 결과가 비어있거나 관련 없는 경우에만 "기록이 없습니다"로 답변
 4. 추측/지어내기 금지
 5. 간결하게 답변 (1-2문장)
+
+중요: retrieve 결과를 꼼꼼히 확인하세요. 검색 결과가 있는데 "없다"고 답변하면 안 됩니다.
 """
 
 SELLER_ANSWER_PROMPT = """
@@ -101,12 +103,14 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
             system_prompt=system_prompt,
         )
 
-        # 검색 쿼리 구성
+        # 검색 쿼리 구성 - user_id를 쿼리에 포함시켜 검색 정확도 향상
         search_query = f"""
-질문: {question}
-user_id: {user_id if user_id else 'none'}
+retrieve 도구를 사용하여 다음 조건으로 검색하세요:
 
-retrieve 실행 후 결과 기반으로만 답변.
+검색어: "{question} 사용자:{user_id if user_id else ''}"
+
+검색 후 반드시 검색 결과를 확인하고, 결과가 있으면 그 내용을 바탕으로 답변하세요.
+검색 결과가 비어있는 경우에만 "기록이 없습니다"라고 답변하세요.
 """
         
         print(f"[DEBUG] Calling agent with retrieve tool...")
