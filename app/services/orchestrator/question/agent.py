@@ -40,41 +40,44 @@ except Exception as e:
 RESPONSE_SYSTEM_PROMPT = """
 당신은 일기를 분석하여 고객의 질문에 답변하는 AI 어시스턴트입니다.
 
+<일기 데이터 형식>
+일기는 다음과 같은 형식으로 저장되어 있습니다:
+```
+날짜: YYYY-MM-DD
+사용자: user_id
+내용: [요약] ... [상세 기록] ...
+```
+
 <작업순서>
 1. **반드시 먼저 retrieve 도구를 사용**하여 지식베이스에서 관련 정보를 검색합니다
    - retrieve 도구 없이는 절대 답변하지 마세요
-   - user_id가 제공된 경우 반드시 filter 파라미터를 사용하세요
-   - filter 형식: {"equals": {"key": "user_id", "value": "실제_user_id_값"}}
-2. 검색된 정보를 활용하여 정확한 답변을 준비합니다
-3. 지식베이스에서 찾은 내용만을 기반으로 답변합니다
+   - 검색 시 날짜와 질문 키워드를 함께 사용하세요
+   - numberOfResults를 10으로 설정하여 충분한 결과를 가져오세요
+2. 검색된 일기 내용을 분석합니다
+3. 질문에 대한 답변이 일기에 있는지 확인합니다
+4. 있으면 해당 내용을 바탕으로 답변하고, 없으면 "해당 정보를 찾을 수 없습니다"라고 답변합니다
 </작업순서>
 
 <retrieve 도구 사용법>
-- query: 검색할 질문 또는 키워드
-- filter: (중요!) user_id 필터링을 위해 반드시 사용
-  예시: {"equals": {"key": "user_id", "value": "74385d5c-e0e1-70cd-2486-bb4cebe82144"}}
-- numberOfResults: 검색 결과 개수 (기본값: 5)
+- query: 날짜 + 질문 키워드를 함께 포함 (예: "2026-01-26 일어난 시간", "1월 26일 점심")
+- numberOfResults: 10 (충분한 결과를 가져오기 위해)
+- filter는 사용하지 마세요
 </retrieve 도구 사용법>
 
 <답변지침>
-- retrieve 도구로 검색한 결과가 없으면: "해당 날짜의 일기 기록을 찾을 수 없습니다."
-- 검색 결과가 있으면: 검색된 내용을 바탕으로 구체적으로 답변
-- 다른 사용자의 기록은 답변에 포함하지 않습니다
-- 지식베이스에 없는 내용은 추측하지 않습니다
-- 질문에 대한 답변만 하고, 추가 의견이나 조언은 붙이지 않습니다
-- 답변에 백틱이나 코드 블록 포맷을 사용하지 마세요
+- 검색된 일기에서 질문과 관련된 정보를 찾아 답변하세요
+- 일기에 해당 정보가 없으면: "해당 정보를 찾을 수 없습니다" 또는 "일기에 기록되지 않았습니다"
+- 일기에 있는 내용만 답변하고, 추측하지 마세요
+- 간결하고 자연스러운 한국어로 답변하세요
+- 날짜, 사용자 ID 같은 메타 정보는 답변에 포함하지 마세요
+- 백틱이나 코드 블록 포맷을 사용하지 마세요
 </답변지침>
 
 <필수규칙>
 - **반드시 답변하기 전에 retrieve 도구를 먼저 사용해야 합니다**
-- **user_id가 제공된 경우 반드시 filter를 사용해야 합니다**
 - retrieve 도구를 사용하지 않고 답변하는 것은 금지됩니다
-- user_id는 답변에 포함하지 않습니다
-- 오류성 표현은 답변에 포함하지 않습니다
-- 간결하고, 핵심만을 포함해서 답변합니다
-- 일기의 내용을 제외한 말은 답변에 포함하지 않습니다
-- 지식베이스에서 찾지 못한 정보는 절대 만들어내지 않습니다
-- 자연스러운 한국어로 작성합니다
+- 일기에 없는 내용은 절대 만들어내지 않습니다
+- 질문에 대한 답변만 하고, 추가 의견이나 조언은 붙이지 않습니다
 </필수규칙>
 
 """
@@ -128,17 +131,6 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
         if context_info:
             system_prompt += f"\n\n<context>\n" + "\n".join(context_info) + "\n</context>"
 
-        # retrieve tool 설정 (user_id 필터 적용)
-        retrieval_filter = {}
-        if user_id:
-            retrieval_filter = {
-                "equals": {
-                    "key": "user_id",
-                    "value": user_id
-                }
-            }
-            print(f"[DEBUG] Retrieval filter: {retrieval_filter}")
-
         # Agent 생성 (retrieve tool 포함)
         print(f"[DEBUG] Creating Agent with retrieve tool...")
         auto_response_agent = Agent(
@@ -147,26 +139,35 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
             system_prompt=system_prompt,
         )
 
-        # 검색 쿼리 구성 - retrieve tool에 filter 전달 지시
+        # 검색 쿼리 구성 - 날짜와 질문을 함께 포함
+        search_parts = []
+        
+        if current_date:
+            # 날짜를 여러 형식으로 추가 (2026-01-26, 1월 26일 등)
+            search_parts.append(current_date)
+            try:
+                from datetime import datetime
+                date_obj = datetime.strptime(current_date, "%Y-%m-%d")
+                search_parts.append(f"{date_obj.month}월 {date_obj.day}일")
+            except:
+                pass
+        
+        search_parts.append(question)
+        
+        search_query_text = " ".join(search_parts)
+        
         search_query = f"""질문: {question}
 
 반드시 retrieve 도구를 사용하여 지식베이스를 검색하세요.
-"""
-        
-        if user_id:
-            search_query += f"""
-retrieve 도구 호출 시 반드시 다음 filter를 사용하세요:
-{{"equals": {{"key": "user_id", "value": "{user_id}"}}}}
+검색 쿼리: "{search_query_text}"
+numberOfResults: 10
 
-이 필터를 사용하지 않으면 다른 사용자의 데이터가 검색될 수 있습니다.
-"""
-        
-        search_query += """
 검색 결과를 바탕으로만 답변하세요.
-검색 결과가 없으면 "해당 날짜의 일기 기록을 찾을 수 없습니다"라고 답변하세요.
+검색 결과가 없거나 질문과 관련된 정보가 없으면 "해당 정보를 찾을 수 없습니다"라고 답변하세요.
 """
         
-        print(f"[DEBUG] Search query: {search_query[:200]}...")
+        print(f"[DEBUG] Search query text: {search_query_text}")
+        print(f"[DEBUG] Full search query: {search_query[:200]}...")
         print(f"[DEBUG] Calling agent with retrieve tool...")
         response = auto_response_agent(search_query)
         
