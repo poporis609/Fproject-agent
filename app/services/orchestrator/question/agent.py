@@ -43,10 +43,18 @@ RESPONSE_SYSTEM_PROMPT = """
 <작업순서>
 1. **반드시 먼저 retrieve 도구를 사용**하여 지식베이스에서 관련 정보를 검색합니다
    - retrieve 도구 없이는 절대 답변하지 마세요
-   - 검색 쿼리에 user_id와 날짜 정보를 포함하세요
+   - user_id가 제공된 경우 반드시 filter 파라미터를 사용하세요
+   - filter 형식: {"equals": {"key": "user_id", "value": "실제_user_id_값"}}
 2. 검색된 정보를 활용하여 정확한 답변을 준비합니다
 3. 지식베이스에서 찾은 내용만을 기반으로 답변합니다
 </작업순서>
+
+<retrieve 도구 사용법>
+- query: 검색할 질문 또는 키워드
+- filter: (중요!) user_id 필터링을 위해 반드시 사용
+  예시: {"equals": {"key": "user_id", "value": "74385d5c-e0e1-70cd-2486-bb4cebe82144"}}
+- numberOfResults: 검색 결과 개수 (기본값: 5)
+</retrieve 도구 사용법>
 
 <답변지침>
 - retrieve 도구로 검색한 결과가 없으면: "해당 날짜의 일기 기록을 찾을 수 없습니다."
@@ -59,6 +67,7 @@ RESPONSE_SYSTEM_PROMPT = """
 
 <필수규칙>
 - **반드시 답변하기 전에 retrieve 도구를 먼저 사용해야 합니다**
+- **user_id가 제공된 경우 반드시 filter를 사용해야 합니다**
 - retrieve 도구를 사용하지 않고 답변하는 것은 금지됩니다
 - user_id는 답변에 포함하지 않습니다
 - 오류성 표현은 답변에 포함하지 않습니다
@@ -110,10 +119,25 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
         # system prompt 구성
         system_prompt = RESPONSE_SYSTEM_PROMPT + f"\nSELLER_ANSWER_PROMPT: {SELLER_ANSWER_PROMPT}"
         
+        context_info = []
         if user_id:
-            system_prompt += f"\n\n<context>\n사용자 ID: {user_id}\n"
+            context_info.append(f"사용자 ID: {user_id}")
         if current_date:
-            system_prompt += f"현재 날짜: {current_date}\n</context>"
+            context_info.append(f"현재 날짜: {current_date}")
+        
+        if context_info:
+            system_prompt += f"\n\n<context>\n" + "\n".join(context_info) + "\n</context>"
+
+        # retrieve tool 설정 (user_id 필터 적용)
+        retrieval_filter = {}
+        if user_id:
+            retrieval_filter = {
+                "equals": {
+                    "key": "user_id",
+                    "value": user_id
+                }
+            }
+            print(f"[DEBUG] Retrieval filter: {retrieval_filter}")
 
         # Agent 생성 (retrieve tool 포함)
         print(f"[DEBUG] Creating Agent with retrieve tool...")
@@ -123,20 +147,26 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
             system_prompt=system_prompt,
         )
 
-        # 검색 쿼리 구성
-        search_query = f"""
-당신은 반드시 retrieve 도구를 사용하여 지식베이스를 검색해야 합니다.
+        # 검색 쿼리 구성 - retrieve tool에 filter 전달 지시
+        search_query = f"""질문: {question}
 
-검색 조건:
-- 사용자 ID: {user_id if user_id else '미제공'}
-- 현재 날짜: {current_date if current_date else '미제공'}
-- 질문: {question}
+반드시 retrieve 도구를 사용하여 지식베이스를 검색하세요.
+"""
+        
+        if user_id:
+            search_query += f"""
+retrieve 도구 호출 시 반드시 다음 filter를 사용하세요:
+{{"equals": {{"key": "user_id", "value": "{user_id}"}}}}
 
-지금 즉시 retrieve 도구를 호출하여 관련 정보를 검색하세요.
+이 필터를 사용하지 않으면 다른 사용자의 데이터가 검색될 수 있습니다.
+"""
+        
+        search_query += """
 검색 결과를 바탕으로만 답변하세요.
 검색 결과가 없으면 "해당 날짜의 일기 기록을 찾을 수 없습니다"라고 답변하세요.
 """
         
+        print(f"[DEBUG] Search query: {search_query[:200]}...")
         print(f"[DEBUG] Calling agent with retrieve tool...")
         response = auto_response_agent(search_query)
         
