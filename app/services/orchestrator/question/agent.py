@@ -198,9 +198,45 @@ numberOfResults: 10
         # tool_result 추출
         tool_results = filter_tool_result(auto_response_agent)
         print(f"[DEBUG] Tool results count: {len(tool_results)}")
+        
+        # reference 추출
+        reference_text = None
+        for tool_result in tool_results:
+            if isinstance(tool_result, dict) and "content" in tool_result:
+                tool_content = tool_result["content"]
+                if isinstance(tool_content, list):
+                    for item in tool_content:
+                        if isinstance(item, dict) and "text" in item:
+                            reference_text = item["text"]
+                            break
+                elif isinstance(tool_content, str):
+                    reference_text = tool_content
+                if reference_text:
+                    break
 
-        # 결과 반환
-        result = {"response": str(response)}
+        # 결과 구성
+        result = {
+            "response": str(response),
+            "reference": reference_text
+        }
+        
+        # Evaluation 실행
+        answer_content = str(response)
+        if answer_content:
+            try:
+                from app.core.evaluation import run_evaluation
+                eval_result = run_evaluation(
+                    input_text=question,
+                    output_text=answer_content,
+                    reference_text=reference_text
+                )
+                if eval_result.error:
+                    print(f"[DEBUG] Evaluation skipped: {eval_result.error}")
+                else:
+                    print(f"[DEBUG] Evaluation completed - Relevance: {eval_result.relevance_label}, Hallucination: {eval_result.hallucination_label}")
+            except Exception as e:
+                print(f"[DEBUG] Evaluation failed: {e}")
+        
         print(f"[DEBUG] ========== generate_auto_response 완료 ==========")
         return result
         

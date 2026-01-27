@@ -34,8 +34,7 @@ async def answer_question(request: Request):
                 }
             )
         
-        # @tool 데코레이터가 있는 함수를 직접 호출하면 안되므로
-        # 내부 로직을 직접 실행
+        # generate_auto_response에서 evaluation까지 처리
         result = generate_auto_response(
             question=question,
             user_id=user_id,
