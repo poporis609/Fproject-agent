@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List
 
 from strands import Agent, tool
-from strands_tools import retrieve
+from strands_tools import retrieve as strands_retrieve
 
 # Secrets Manager에서 설정 가져오기
 try:
@@ -34,8 +34,132 @@ try:
 except Exception as e:
     print(f"❌ ERROR: Question Agent 설정 로드 실패: {str(e)}")
     raise
-    os.environ['KNOWLEDGE_BASE_ID'] = os.environ.get('KNOWLEDGE_BASE_ID', 'MISSING')
-    os.environ['AWS_REGION'] = os.environ.get('AWS_REGION', 'ap-northeast-2')
+
+
+# ============================================================================
+# 보안 강화: user_id 필터가 강제 적용된 커스텀 retrieve 도구
+# ============================================================================
+
+# 현재 요청의 user_id를 저장하는 컨텍스트 변수
+_current_user_id: str = None
+
+
+def set_current_user_id(user_id: str):
+    """현재 요청의 user_id 설정 (generate_auto_response에서 호출)"""
+    global _current_user_id
+    _current_user_id = user_id
+
+
+def get_current_user_id() -> str:
+    """현재 요청의 user_id 반환"""
+    global _current_user_id
+    return _current_user_id
+
+
+@tool
+def secure_retrieve(
+    text: str,
+    numberOfResults: int = 10,
+    score: float = 0.4
+) -> Dict[str, Any]:
+    """
+    보안이 강화된 Knowledge Base 검색 도구.
+    user_id 필터가 코드 레벨에서 강제 적용되어 다른 사용자의 데이터에 접근할 수 없습니다.
+    
+    Args:
+        text: 검색할 쿼리 텍스트
+        numberOfResults: 반환할 결과 수 (기본값: 10)
+        score: 최소 관련성 점수 (기본값: 0.4)
+    
+    Returns:
+        검색 결과
+    """
+    user_id = get_current_user_id()
+    
+    if not user_id:
+        print(f"[SECURITY] secure_retrieve 호출 시 user_id가 없습니다. 검색을 거부합니다.")
+        return {
+            "status": "error",
+            "content": [{"text": "사용자 인증이 필요합니다."}]
+        }
+    
+    print(f"[SECURITY] secure_retrieve 호출 - user_id 필터 강제 적용: {user_id}")
+    
+    # 코드 레벨에서 user_id 필터 강제 적용 - LLM이 변경 불가능
+    retrieve_filter = {
+        "equals": {
+            "key": "user_id",
+            "value": user_id
+        }
+    }
+    
+    # strands_tools의 retrieve 호출 (tool use 형식으로 변환)
+    tool_input = {
+        "text": text,
+        "numberOfResults": numberOfResults,
+        "score": score,
+        "retrieveFilter": retrieve_filter
+    }
+    
+    # strands_tools retrieve는 tool use 형식을 기대하므로 직접 호출
+    try:
+        import boto3
+        from botocore.config import Config
+        
+        kb_id = os.environ.get('KNOWLEDGE_BASE_ID')
+        region = os.environ.get('AWS_REGION', 'ap-northeast-2')
+        
+        bedrock_agent = boto3.client(
+            'bedrock-agent-runtime',
+            region_name=region,
+            config=Config(read_timeout=60)
+        )
+        
+        response = bedrock_agent.retrieve(
+            knowledgeBaseId=kb_id,
+            retrievalQuery={'text': text},
+            retrievalConfiguration={
+                'vectorSearchConfiguration': {
+                    'numberOfResults': numberOfResults,
+                    'filter': retrieve_filter
+                }
+            }
+        )
+        
+        # 결과 포맷팅
+        results = response.get('retrievalResults', [])
+        
+        if not results:
+            return {
+                "status": "success",
+                "content": [{"text": "검색 결과가 없습니다."}]
+            }
+        
+        # 결과를 텍스트로 포맷팅
+        formatted_results = []
+        for i, result in enumerate(results, 1):
+            content = result.get('content', {}).get('text', '')
+            result_score = result.get('score', 0)
+            if result_score >= score:
+                formatted_results.append(f"[결과 {i}] (점수: {result_score:.2f})\n{content}")
+        
+        if not formatted_results:
+            return {
+                "status": "success", 
+                "content": [{"text": "관련성 높은 검색 결과가 없습니다."}]
+            }
+        
+        return {
+            "status": "success",
+            "content": [{"text": "\n\n".join(formatted_results)}]
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] secure_retrieve 실패: {str(e)}")
+        return {
+            "status": "error",
+            "content": [{"text": f"검색 중 오류가 발생했습니다: {str(e)}"}]
+        }
 
 RESPONSE_SYSTEM_PROMPT = """
 당신은 일기를 분석하여 고객의 질문에 답변하는 AI 어시스턴트입니다.
@@ -44,13 +168,12 @@ RESPONSE_SYSTEM_PROMPT = """
 일기는 다음과 같은 형식으로 저장되어 있습니다:
 ```
 날짜: YYYY-MM-DD
-사용자: user_id
 내용: [요약] ... [상세 기록] ...
 ```
 
 <작업순서>
-1. **반드시 먼저 retrieve 도구를 사용**하여 지식베이스에서 관련 정보를 검색합니다
-   - retrieve 도구 없이는 절대 답변하지 마세요
+1. **반드시 먼저 secure_retrieve 도구를 사용**하여 지식베이스에서 관련 정보를 검색합니다
+   - secure_retrieve 도구 없이는 절대 답변하지 마세요
    - 검색 시 날짜와 질문 키워드를 함께 사용하세요
    - numberOfResults를 10으로 설정하여 충분한 결과를 가져오세요
 2. 검색된 일기 내용을 분석합니다
@@ -58,11 +181,11 @@ RESPONSE_SYSTEM_PROMPT = """
 4. 있으면 해당 내용을 바탕으로 답변하고, 없으면 "해당 정보를 찾을 수 없습니다"라고 답변합니다
 </작업순서>
 
-<retrieve 도구 사용법>
-- query: 날짜 + 질문 키워드를 함께 포함 (예: "2026-01-26 일어난 시간", "1월 26일 점심")
+<secure_retrieve 도구 사용법>
+- text: 날짜 + 질문 키워드를 함께 포함 (예: "2026-01-26 일어난 시간", "1월 26일 점심")
 - numberOfResults: 10 (충분한 결과를 가져오기 위해)
-- filter는 사용하지 마세요
-</retrieve 도구 사용법>
+- 보안 필터는 자동으로 적용됩니다
+</secure_retrieve 도구 사용법>
 
 <답변지침>
 - 검색된 일기에서 질문과 관련된 정보를 찾아 답변하세요
@@ -71,11 +194,12 @@ RESPONSE_SYSTEM_PROMPT = """
 - 간결하고 자연스러운 한국어로 답변하세요
 - 날짜, 사용자 ID 같은 메타 정보는 답변에 포함하지 마세요
 - 백틱이나 코드 블록 포맷을 사용하지 마세요
+- 질문한 내용에만 정확히 답변하세요. 관련 정보라도 질문하지 않은 내용은 포함하지 마세요
 </답변지침>
 
 <필수규칙>
-- **반드시 답변하기 전에 retrieve 도구를 먼저 사용해야 합니다**
-- retrieve 도구를 사용하지 않고 답변하는 것은 금지됩니다
+- **반드시 답변하기 전에 secure_retrieve 도구를 먼저 사용해야 합니다**
+- secure_retrieve 도구를 사용하지 않고 답변하는 것은 금지됩니다
 - 일기에 없는 내용은 절대 만들어내지 않습니다
 - 질문에 대한 답변만 하고, 추가 의견이나 조언은 붙이지 않습니다
 </필수규칙>
@@ -117,6 +241,14 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
     if not kb_id:
         print(f"[ERROR] CRITICAL: KNOWLEDGE_BASE_ID가 런타임에 비어있습니다!")
         return {"response": "Knowledge Base 설정 오류. 시스템 관리자에게 문의하세요."}
+    
+    # 보안: user_id가 없으면 검색 거부
+    if not user_id:
+        print(f"[ERROR] SECURITY: user_id가 제공되지 않았습니다. 검색을 거부합니다.")
+        return {"response": "사용자 인증이 필요합니다. 다시 로그인해주세요."}
+    
+    # 보안: 현재 요청의 user_id를 컨텍스트에 설정 (secure_retrieve에서 사용)
+    set_current_user_id(user_id)
 
     try:
         # system prompt 구성
@@ -131,11 +263,11 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
         if context_info:
             system_prompt += f"\n\n<context>\n" + "\n".join(context_info) + "\n</context>"
 
-        # Agent 생성 (retrieve tool 포함)
-        print(f"[DEBUG] Creating Agent with retrieve tool...")
+        # Agent 생성 (secure_retrieve tool 포함 - user_id 필터 강제 적용)
+        print(f"[DEBUG] Creating Agent with secure_retrieve tool...")
         auto_response_agent = Agent(
             model=BEDROCK_MODEL_ARN,
-            tools=[retrieve],
+            tools=[secure_retrieve],
             system_prompt=system_prompt,
         )
 
@@ -178,7 +310,7 @@ def generate_auto_response(question: str, user_id: str = None, current_date: str
         
         search_query = f"""질문: {question}
 
-반드시 retrieve 도구를 사용하여 지식베이스를 검색하세요.
+반드시 secure_retrieve 도구를 사용하여 지식베이스를 검색하세요.
 
 검색 쿼리: "{search_query_text}"
 numberOfResults: 10
@@ -189,7 +321,7 @@ numberOfResults: 10
         
         print(f"[DEBUG] Original question: {question}")
         print(f"[DEBUG] Expanded search query: {search_query_text}")
-        print(f"[DEBUG] Calling agent with retrieve tool...")
+        print(f"[DEBUG] Calling agent with secure_retrieve tool (user_id filter enforced)...")
         response = auto_response_agent(search_query)
         
         print(f"[DEBUG] Agent 응답 완료")
